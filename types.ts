@@ -9,7 +9,7 @@ export interface Product {
 }
 
 export interface Offer {
-  store: 'Amazon.in' | 'Flipkart' | 'Croma' | 'Reliance Digital' | 'Tata Cliq' | string;
+  store: string;
   price: number;
   url: string;
   currency: string;

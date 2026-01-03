@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, LogOut, ExternalLink, Sparkles, AlertCircle, ShoppingBag, Star, Heart, Menu, User, ArrowRight, Loader2, Zap, TrendingUp, X, Globe, Server, Database, Image as ImageIcon } from 'lucide-react';
+import { Search, Sparkles, ShoppingBag, Star, Heart, Menu, User, ArrowRight, Loader2, Zap, TrendingUp, X, Globe, Server, Database } from 'lucide-react';
 import { Product, SearchState } from '../types';
 import { searchMockProducts } from '../services/mockData';
 import { searchProducts, analyzeProductValue } from '../services/geminiService';
@@ -56,7 +56,6 @@ const FALLBACK_IMAGES: Record<string, string[]> = {
   ]
 };
 
-// Reduced Discovery Tiles for a cleaner, non-scrolling layout
 const DISCOVERY_TILES = [
     { id: 1, title: "Audio", img: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&q=80" },
     { id: 2, title: "Fashion", img: "https://images.unsplash.com/photo-1552346154-21d32810aba3?w=600&q=80" },
@@ -86,6 +85,15 @@ const getFallbackImage = (category: string, id: string): string => {
     }
     const index = Math.abs(hash) % images.length;
     return images[index];
+};
+
+const getSafeHostname = (url: string): string => {
+    try {
+        if (!url) return 'google.com';
+        return new URL(url).hostname;
+    } catch (e) {
+        return 'google.com';
+    }
 };
 
 // --- Spotlight Card Component ---
@@ -221,10 +229,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const sortedResults = useMemo(() => {
     return [...searchState.results]
         .sort((a, b) => {
-            const pricesA = a.offers.map(o => o.price).filter(p => p > 0);
+            const pricesA = a.offers.map(o => o.price).filter(p => typeof p === 'number' && p > 0);
             const minA = pricesA.length > 0 ? Math.min(...pricesA) : Infinity;
-            const pricesB = b.offers.map(o => o.price).filter(p => p > 0);
+            const pricesB = b.offers.map(o => o.price).filter(p => typeof p === 'number' && p > 0);
             const minB = pricesB.length > 0 ? Math.min(...pricesB) : Infinity;
+            
+            // Push items with no price (Infinity) to the bottom
+            if (minA === Infinity && minB === Infinity) return 0;
+            if (minA === Infinity) return 1;
+            if (minB === Infinity) return -1;
+            
             return minA - minB;
     });
   }, [searchState.results]);
@@ -495,7 +509,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                                             <div key={idx} className="flex justify-between items-center text-sm">
                                                 <div className="flex items-center gap-2.5">
                                                     <div className="w-5 h-5 rounded-md bg-white flex items-center justify-center overflow-hidden shrink-0">
-                                                        <img src={`https://www.google.com/s2/favicons?domain=${new URL(offer.url).hostname}&sz=32`} className="w-4 h-4" alt="" />
+                                                        <img src={`https://www.google.com/s2/favicons?domain=${getSafeHostname(offer.url)}&sz=32`} className="w-4 h-4" alt="" />
                                                     </div>
                                                     <span className="text-gray-400 truncate max-w-[100px]">{offer.store}</span>
                                                 </div>

@@ -1,8 +1,7 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { Product } from "../types";
 
-// Ensure API key is loaded. In a real app, this comes from env vars.
-// For the hackathon, we assume process.env.API_KEY is available.
+// Ensure API key is loaded.
 const apiKey = process.env.API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
 
@@ -22,14 +21,12 @@ const cleanJson = (text: string) => {
       return text.substring(firstBrace, lastBrace + 1);
   }
 
-  // 3. Fallback: return as is (cleanup might happen in JSON.parse if it's just whitespace)
+  // 3. Fallback: return as is
   return text.trim();
 };
 
 /**
- * Acts as a Universal API Bridge.
- * Since direct client-side API calls to Amazon/Flipkart are CORS-blocked,
- * we use Gemini 2.5 Flash with Google Search Grounding to act as a real-time proxy.
+ * Acts as a Universal API Bridge using Gemini 2.5 Flash.
  */
 export const searchProducts = async (query: string): Promise<Product[]> => {
   if (!apiKey) {
@@ -37,7 +34,6 @@ export const searchProducts = async (query: string): Promise<Product[]> => {
     return [];
   }
 
-  // Gemini 2.5 Flash is optimized for speed and tool use (Search Grounding)
   const model = "gemini-2.5-flash"; 
 
   const prompt = `
@@ -48,17 +44,17 @@ export const searchProducts = async (query: string): Promise<Product[]> => {
     
     DATA EXTRACTION RULES:
     1.  Identify EXACTLY 8 DISTINCT and RELEVANT product models matching "${query}".
-    2.  For EACH product, find the single BEST available price/offer from a major retailer.
+    2.  For EACH product, find the single BEST available price/offer.
     3.  EXTRACT the specific current price in INR.
     4.  EXTRACT the direct product URL.
     5.  EXTRACT the ACTUAL Product Image URL. 
         - CRITICAL: You must find a direct link to the product image (ending in .jpg, .png, .webp).
-        - Search specifically for image source URLs from domains like: 'm.media-amazon.com', 'rukminim1.flixcart.com', 'assets.myntassets.com', 'media-ik.croma.com'.
-        - Do NOT use generic placeholders. If specific image not found, leave empty.
-    6.  GENERATE a concise list of key features (max 2 items) to save space.
+        - Search domains: 'm.media-amazon.com', 'rukminim1.flixcart.com', 'assets.myntassets.com'.
+        - Do NOT use generic placeholders.
+    6.  GENERATE a concise list of key features (max 2 items).
     
     OUTPUT FORMAT:
-    You must output strictly VALID JSON. Do not include introductory text.
+    You must output strictly VALID JSON.
     {
       "products": [
         {
@@ -68,6 +64,7 @@ export const searchProducts = async (query: string): Promise<Product[]> => {
           "category": "Category Name",
           "rating": 4.5,
           "features": ["Feature 1", "Feature 2"],
+          "price": 9999,
           "offers": [
             {
               "store": "Amazon.in",
@@ -88,7 +85,6 @@ export const searchProducts = async (query: string): Promise<Product[]> => {
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
-        // responseMimeType: "application/json" // REMOVED: Not supported with tools in this version
         temperature: 0.1,
       }
     });
@@ -112,18 +108,19 @@ export const searchProducts = async (query: string): Promise<Product[]> => {
                 ...p,
                 id: p.id || `gemini-live-${Date.now()}-${index}`,
                 image: p.image || "",
-                // Ensure there is at least one offer
+                // Fallback logic if 'offers' array is empty or missing
                 offers: (p.offers && p.offers.length > 0) ? p.offers : [
                     {
                         store: "Online Deal",
-                        price: p.offers?.[0]?.price || 0,
+                        // Check for top-level price property or default to 0
+                        price: (typeof p.price === 'number') ? p.price : 0,
                         currency: "INR",
                         url: chunks[0]?.web?.uri || `https://www.google.com/search?q=${encodeURIComponent(p.name)}`,
                         inStock: true
                     }
                 ]
             }))
-            .slice(0, 8); // Ensure we return exactly up to 8 as requested
+            .slice(0, 8);
     }
 
     return [];

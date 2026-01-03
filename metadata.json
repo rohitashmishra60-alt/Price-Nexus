@@ -1,5 +1,5 @@
 {
-  "name": "Copy of PriceNexus",
+  "name": "PriceNexus",
   "description": "A Vercel-styled, AI-powered e-commerce aggregator built for the Google Developer Group hackathon. It compares prices across platforms and uses Gemini to analyze value.",
   "requestFramePermissions": []
 }
