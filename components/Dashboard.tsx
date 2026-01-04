@@ -2,59 +2,12 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Sparkles, ShoppingBag, Star, Heart, Menu, User, ArrowRight, Loader2, Zap, TrendingUp, X, Globe, Server, Database } from 'lucide-react';
 import { Product, SearchState } from '../types';
 import { searchMockProducts } from '../services/mockData';
-import { searchProducts, analyzeProductValue } from '../services/geminiService';
+import { searchProducts, analyzeProductValue, generateProductImage } from '../services/geminiService';
+import ChatBot from './ChatBot';
 
 interface DashboardProps {
   onLogout: () => void;
 }
-
-const FALLBACK_IMAGES: Record<string, string[]> = {
-  'Audio': [
-    'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1583394838336-acd977736f90?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1524678606372-56527bb42343?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1618366712010-f4ae9c647dcb?w=800&auto=format&fit=crop&q=80'
-  ],
-  'Electronics': [
-    'https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1498049860654-af1a5c5668ba?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1525547719571-a2d4ac8945e2?w=800&auto=format&fit=crop&q=80'
-  ],
-  'Gaming': [
-    'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1605901309584-818e25960b8f?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1593305841991-05c2e4078995?w=800&auto=format&fit=crop&q=80'
-  ],
-  'Laptops': [
-    'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1517336714731-489689fd1ca4?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=800&auto=format&fit=crop&q=80'
-  ],
-  'Smartphones': [
-    'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1567581935884-3349723552ca?w=800&auto=format&fit=crop&q=80'
-  ],
-  'Fashion': [
-    'https://images.unsplash.com/photo-1445205170230-053b83016050?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?w=800&auto=format&fit=crop&q=80'
-  ],
-  'Home': [
-    'https://images.unsplash.com/photo-1484101403633-562f891dc89a?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1583847661884-62756cf5e6a9?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800&auto=format&fit=crop&q=80'
-  ],
-  'Beauty': [
-    'https://images.unsplash.com/photo-1596462502278-27bfdd403348?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1571781926291-280553da7566?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1616683693504-3ea7e9ad6fec?w=800&auto=format&fit=crop&q=80'
-  ],
-  'Default': [
-    'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&auto=format&fit=crop&q=80'
-  ]
-};
 
 const DISCOVERY_TILES = [
     { id: 1, title: "Audio", img: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&q=80" },
@@ -64,29 +17,6 @@ const DISCOVERY_TILES = [
     { id: 5, title: "Sneakers", img: "https://images.unsplash.com/photo-1607522370275-f14206abe5d3?w=600&q=80" },
 ];
 
-const getFallbackImage = (category: string, id: string): string => {
-    let key = 'Default';
-    if (category) {
-        const lowerCat = category.toLowerCase();
-        if (lowerCat.includes('audio') || lowerCat.includes('headphone') || lowerCat.includes('earbud') || lowerCat.includes('speaker')) key = 'Audio';
-        else if (lowerCat.includes('gaming') || lowerCat.includes('console') || lowerCat.includes('controller')) key = 'Gaming';
-        else if (lowerCat.includes('laptop') || lowerCat.includes('computer') || lowerCat.includes('pc')) key = 'Laptops';
-        else if (lowerCat.includes('phone') || lowerCat.includes('mobile') || lowerCat.includes('android') || lowerCat.includes('iphone')) key = 'Smartphones';
-        else if (lowerCat.includes('fashion') || lowerCat.includes('clothing') || lowerCat.includes('shoe') || lowerCat.includes('wear')) key = 'Fashion';
-        else if (lowerCat.includes('home') || lowerCat.includes('kitchen') || lowerCat.includes('appliance')) key = 'Home';
-        else if (lowerCat.includes('beauty') || lowerCat.includes('makeup') || lowerCat.includes('skin')) key = 'Beauty';
-        else key = 'Electronics';
-    }
-
-    const images = FALLBACK_IMAGES[key] || FALLBACK_IMAGES['Default'];
-    let hash = 0;
-    for (let i = 0; i < id.length; i++) {
-        hash = id.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const index = Math.abs(hash) % images.length;
-    return images[index];
-};
-
 const getSafeHostname = (url: string): string => {
     try {
         if (!url) return 'google.com';
@@ -95,6 +25,36 @@ const getSafeHostname = (url: string): string => {
         return 'google.com';
     }
 };
+
+// --- Footer Component ---
+const Footer = () => (
+    <footer className="w-full border-t border-white/5 bg-black/40 backdrop-blur-md py-8 mt-auto shrink-0 z-20 relative">
+        <div className="max-w-[1800px] mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="flex flex-col md:flex-row items-center gap-4">
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-shop-purple to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-900/20">
+                        <span className="font-bold text-white text-xs">P</span>
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="font-bold text-gray-200 text-sm tracking-tight">PriceNexus</span>
+                        <span className="text-[10px] text-gray-500">© 2024 All rights reserved.</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div className="flex items-center gap-8 text-xs font-medium text-gray-500">
+                <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
+                <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
+                <a href="#" className="hover:text-white transition-colors">API Documentation</a>
+                <div className="h-4 w-px bg-white/10 hidden md:block"></div>
+                <div className="flex items-center gap-2 text-green-500/80 bg-green-500/5 px-3 py-1.5 rounded-full border border-green-500/10">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                    Systems Operational
+                </div>
+            </div>
+        </div>
+    </footer>
+);
 
 // --- Spotlight Card Component ---
 const SpotlightCard = ({ children, className = "", onClick }: { children: React.ReactNode; className?: string, onClick?: () => void }) => {
@@ -144,6 +104,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const [usedFallback, setUsedFallback] = useState(false);
   const [failedImageIds, setFailedImageIds] = useState<Set<string>>(new Set());
   const [loadingStatus, setLoadingStatus] = useState("Initializing connection...");
+  
+  // Image Generation State
+  const [generatedImages, setGeneratedImages] = useState<Record<string, string>>({});
+  const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
 
   // Typing effect for analysis
   useEffect(() => {
@@ -180,6 +144,40 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       }
   }, [searchState.isLoading]);
 
+  // Handle automatic image generation for products with no images
+  useEffect(() => {
+    searchState.results.forEach(product => {
+        if (!product.image) {
+            triggerImageGeneration(product.id, product.name);
+        }
+    });
+  }, [searchState.results]);
+
+  const triggerImageGeneration = async (id: string, name: string) => {
+    if (generatingIds.has(id) || generatedImages[id]) return;
+    
+    setGeneratingIds(prev => new Set(prev).add(id));
+    
+    // Call Gemini 2.5 Flash Image via service
+    const imgData = await generateProductImage(name);
+    
+    if (imgData) {
+        setGeneratedImages(prev => ({ ...prev, [id]: imgData }));
+        // Also remove from failed IDs if it was there
+        setFailedImageIds(prev => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+        });
+    }
+    
+    setGeneratingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+    });
+  };
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchState.query.trim()) return;
@@ -188,6 +186,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     setUsedFallback(false);
     setAnalysis(null); 
     setFailedImageIds(new Set());
+    setGeneratedImages({}); // Reset generated images
+    setGeneratingIds(new Set());
     
     try {
         // Use Gemini Universal API Bridge to search
@@ -217,6 +217,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     const result = await analyzeProductValue(product);
     setAnalysis(result);
     setAnalyzingId(null);
+  };
+
+  const resetDashboard = () => {
+    setSearchState({
+        query: '',
+        results: [],
+        isLoading: false,
+        hasSearched: false,
+    });
+    setAnalysis(null);
+    setUsedFallback(false);
   };
 
   const formatCurrency = (amount: number, currency: string) => {
@@ -258,7 +269,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         <div className="max-w-[1800px] mx-auto px-4 md:px-6 h-full flex items-center justify-between">
             <div className="flex items-center gap-4">
                  <Menu className="w-5 h-5 text-gray-400 md:hidden hover:text-white cursor-pointer" />
-                 <div onClick={() => window.location.reload()} className="cursor-pointer flex items-center gap-2 group">
+                 <div onClick={resetDashboard} className="cursor-pointer flex items-center gap-2 group">
                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-shop-purple to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-900/20 group-hover:scale-105 transition-transform duration-300">
                          <span className="font-bold text-white text-lg">P</span>
                      </div>
@@ -283,6 +294,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             )}
 
             <div className="flex items-center gap-3 md:gap-6">
+                <ChatBot /> {/* Simple Icon ChatBot */}
                 <button className="p-2 rounded-full hover:bg-white/5 transition-colors text-gray-400 hover:text-white">
                     <TrendingUp className="w-5 h-5" />
                 </button>
@@ -299,101 +311,103 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
 
       <main className="relative z-10 flex-1 flex flex-col w-full h-full overflow-hidden">
         
-        {/* State 0: Discovery Grid (No scrolling, perfect fit) */}
+        {/* State 0: Discovery Grid */}
         {!searchState.hasSearched && (
-            <div className="flex flex-col h-full w-full max-w-[1600px] mx-auto px-4 md:px-6 pb-6">
-                
-                {/* Top Section: Title & Search (Flex Grow to Center) */}
-                <div className="flex-1 flex flex-col items-center justify-center w-full z-10 relative">
-                     
-                     {/* Floating Background Elements */}
-                     <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-                        {/* Left Side */}
-                        <div className="absolute top-[10%] left-[5%] md:left-[10%] w-[180px] h-[240px] md:w-[240px] md:h-[320px] rounded-[2rem] bg-gradient-to-br from-white/5 to-transparent border border-white/5 rotate-[-12deg] opacity-40 blur-[1px] animate-pulse-slow">
-                             <img src="https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&q=80" alt="" className="w-full h-full object-cover rounded-[2rem] opacity-70 mix-blend-luminosity" />
-                        </div>
+            <div className="flex flex-col h-full w-full overflow-y-auto scrollbar-hide">
+                <div className="flex-1 flex flex-col w-full max-w-[1600px] mx-auto px-4 md:px-6 pb-6 min-h-[700px]">
+                    {/* Top Section: Title & Search (Flex Grow to Center) */}
+                    <div className="flex-1 flex flex-col items-center justify-center w-full z-10 relative">
                         
-                        {/* Right Side */}
-                        <div className="absolute top-[15%] right-[5%] md:right-[10%] w-[200px] h-[260px] md:w-[260px] md:h-[340px] rounded-[2rem] bg-gradient-to-bl from-white/5 to-transparent border border-white/5 rotate-[12deg] opacity-40 blur-[1px] animate-pulse-slow" style={{ animationDelay: '2s' }}>
-                             <img src="https://images.unsplash.com/photo-1600861194942-f883de0dfe96?w=600&q=80" alt="" className="w-full h-full object-cover rounded-[2rem] opacity-70 mix-blend-luminosity" />
+                        {/* Floating Background Elements */}
+                        <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
+                            {/* Left Side */}
+                            <div className="absolute top-[10%] left-[5%] md:left-[10%] w-[180px] h-[240px] md:w-[240px] md:h-[320px] rounded-[2rem] bg-gradient-to-br from-white/5 to-transparent border border-white/5 rotate-[-12deg] opacity-40 blur-[1px] animate-pulse-slow">
+                                <img src="https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&q=80" alt="" className="w-full h-full object-cover rounded-[2rem] opacity-70 mix-blend-luminosity" />
+                            </div>
+                            
+                            {/* Right Side */}
+                            <div className="absolute top-[15%] right-[5%] md:right-[10%] w-[200px] h-[260px] md:w-[260px] md:h-[340px] rounded-[2rem] bg-gradient-to-bl from-white/5 to-transparent border border-white/5 rotate-[12deg] opacity-40 blur-[1px] animate-pulse-slow" style={{ animationDelay: '2s' }}>
+                                <img src="https://images.unsplash.com/photo-1600861194942-f883de0dfe96?w=600&q=80" alt="" className="w-full h-full object-cover rounded-[2rem] opacity-70 mix-blend-luminosity" />
+                            </div>
+
+                            {/* Extra tiny ones for depth */}
+                            <div className="absolute top-[40%] left-[2%] w-[120px] h-[120px] rounded-full border border-white/5 bg-white/5 blur-[2px] opacity-20 animate-bounce delay-700"></div>
+                            <div className="absolute top-[20%] right-[20%] w-[80px] h-[80px] rounded-full border border-shop-purple/20 bg-shop-purple/10 blur-[20px] opacity-40"></div>
                         </div>
 
-                        {/* Extra tiny ones for depth */}
-                        <div className="absolute top-[40%] left-[2%] w-[120px] h-[120px] rounded-full border border-white/5 bg-white/5 blur-[2px] opacity-20 animate-bounce delay-700"></div>
-                        <div className="absolute top-[20%] right-[20%] w-[80px] h-[80px] rounded-full border border-shop-purple/20 bg-shop-purple/10 blur-[20px] opacity-40"></div>
-                     </div>
+                        <div className="w-full max-w-2xl flex flex-col items-center animate-slide-up bg-black/60 backdrop-blur-xl p-10 rounded-[3rem] border border-white/10 shadow-2xl shadow-black/80 z-10">
+                            {/* Central Logo Text */}
+                            <h1 className="text-5xl md:text-7xl font-black text-white tracking-tighter mb-10 text-center bg-clip-text text-transparent bg-gradient-to-b from-white to-gray-400 drop-shadow-sm">
+                                Shop <span className="text-shop-purple">Smart.</span>
+                            </h1>
+                            
+                            {/* Big Glassy Search Bar */}
+                            <form onSubmit={handleSearch} className="w-full relative group">
+                                <div className="absolute -inset-0.5 bg-gradient-to-r from-shop-purple via-blue-500 to-shop-purple rounded-full opacity-30 blur-md group-hover:opacity-60 transition-opacity duration-500"></div>
+                                <div className="relative bg-black/80 backdrop-blur-2xl rounded-full flex items-center p-2 pl-6 shadow-2xl border border-white/10 group-hover:border-white/20 transition-all">
+                                    <Search className="w-6 h-6 text-gray-400 mr-3 group-hover:text-white transition-colors" />
+                                    <input 
+                                        type="text"
+                                        placeholder="Search brands, products, styles..."
+                                        className="flex-1 bg-transparent text-lg py-4 outline-none placeholder:text-gray-600 text-white font-medium"
+                                        value={searchState.query}
+                                        onChange={(e) => setSearchState(prev => ({...prev, query: e.target.value}))}
+                                        autoFocus
+                                    />
+                                    <button type="submit" className="bg-white text-black p-4 rounded-full hover:scale-105 active:scale-95 transition-transform duration-200 shadow-lg shadow-white/10">
+                                        <ArrowRight className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            </form>
+                            
+                            {/* Live Deals Ticker */}
+                            <div className="mt-10 w-full overflow-hidden whitespace-nowrap mask-linear-fade">
+                                <div className="inline-flex animate-scroll items-center gap-8 text-sm text-gray-500 font-mono">
+                                    <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>LIVE:</span>
+                                    <span>Sony WH-1000XM5 ₹19,999 (-18%)</span>
+                                    <span>•</span>
+                                    <span>iPhone 15 ₹65,000</span>
+                                    <span>•</span>
+                                    <span>Samsung S24 Ultra Low Stock</span>
+                                    <span>•</span>
+                                    <span>Nike Air Jordan 1 Restocked</span>
+                                    <span>•</span>
+                                    <span>PS5 Slim ₹39,990</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-                     <div className="w-full max-w-2xl flex flex-col items-center animate-slide-up bg-black/60 backdrop-blur-xl p-10 rounded-[3rem] border border-white/10 shadow-2xl shadow-black/80 z-10">
-                         {/* Central Logo Text */}
-                         <h1 className="text-5xl md:text-7xl font-black text-white tracking-tighter mb-10 text-center bg-clip-text text-transparent bg-gradient-to-b from-white to-gray-400 drop-shadow-sm">
-                             Shop <span className="text-shop-purple">Smart.</span>
-                         </h1>
-                         
-                         {/* Big Glassy Search Bar */}
-                         <form onSubmit={handleSearch} className="w-full relative group">
-                            <div className="absolute -inset-0.5 bg-gradient-to-r from-shop-purple via-blue-500 to-shop-purple rounded-full opacity-30 blur-md group-hover:opacity-60 transition-opacity duration-500"></div>
-                            <div className="relative bg-black/80 backdrop-blur-2xl rounded-full flex items-center p-2 pl-6 shadow-2xl border border-white/10 group-hover:border-white/20 transition-all">
-                                <Search className="w-6 h-6 text-gray-400 mr-3 group-hover:text-white transition-colors" />
-                                <input 
-                                    type="text"
-                                    placeholder="Search brands, products, styles..."
-                                    className="flex-1 bg-transparent text-lg py-4 outline-none placeholder:text-gray-600 text-white font-medium"
-                                    value={searchState.query}
-                                    onChange={(e) => setSearchState(prev => ({...prev, query: e.target.value}))}
-                                    autoFocus
+                    {/* Bottom Section: Single Row of Spotlight Cards (No Overlap) */}
+                    <div className="w-full h-48 md:h-64 shrink-0 grid grid-cols-5 gap-4 mt-4 animate-fade-in opacity-0" style={{ animationDelay: '0.3s' }}>
+                        {DISCOVERY_TILES.map((tile) => (
+                            <SpotlightCard key={tile.id} className="group cursor-pointer hover:border-white/20">
+                                <img 
+                                    src={tile.img} 
+                                    alt={tile.title}
+                                    className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-80 group-hover:scale-105 transition-all duration-1000" 
                                 />
-                                <button type="submit" className="bg-white text-black p-4 rounded-full hover:scale-105 active:scale-95 transition-transform duration-200 shadow-lg shadow-white/10">
-                                    <ArrowRight className="w-5 h-5" />
-                                </button>
-                            </div>
-                         </form>
-                         
-                         {/* Live Deals Ticker */}
-                         <div className="mt-10 w-full overflow-hidden whitespace-nowrap mask-linear-fade">
-                            <div className="inline-flex animate-scroll items-center gap-8 text-sm text-gray-500 font-mono">
-                                <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>LIVE:</span>
-                                <span>Sony WH-1000XM5 ₹19,999 (-18%)</span>
-                                <span>•</span>
-                                <span>iPhone 15 ₹65,000</span>
-                                <span>•</span>
-                                <span>Samsung S24 Ultra Low Stock</span>
-                                <span>•</span>
-                                <span>Nike Air Jordan 1 Restocked</span>
-                                <span>•</span>
-                                <span>PS5 Slim ₹39,990</span>
-                            </div>
-                         </div>
+                                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-90 group-hover:opacity-70 transition-opacity"></div>
+                                
+                                {/* Text Overlay */}
+                                <div className="absolute inset-0 p-6 flex flex-col justify-end pointer-events-none">
+                                    <h3 className="text-xl font-bold text-white tracking-tight translate-y-2 group-hover:translate-y-0 opacity-80 group-hover:opacity-100 transition-all duration-300">
+                                        {tile.title}
+                                    </h3>
+                                    <div className="h-1 w-8 bg-white/50 mt-2 transform scale-x-0 group-hover:scale-x-100 origin-left transition-transform duration-500"></div>
+                                </div>
+                            </SpotlightCard>
+                        ))}
                     </div>
                 </div>
-
-                {/* Bottom Section: Single Row of Spotlight Cards (No Overlap) */}
-                <div className="w-full h-48 md:h-64 shrink-0 grid grid-cols-5 gap-4 mt-4 animate-fade-in opacity-0" style={{ animationDelay: '0.3s' }}>
-                    {DISCOVERY_TILES.map((tile) => (
-                        <SpotlightCard key={tile.id} className="group cursor-pointer hover:border-white/20">
-                            <img 
-                                src={tile.img} 
-                                alt={tile.title}
-                                className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-80 group-hover:scale-105 transition-all duration-1000" 
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-90 group-hover:opacity-70 transition-opacity"></div>
-                            
-                            {/* Text Overlay */}
-                            <div className="absolute inset-0 p-6 flex flex-col justify-end pointer-events-none">
-                                <h3 className="text-xl font-bold text-white tracking-tight translate-y-2 group-hover:translate-y-0 opacity-80 group-hover:opacity-100 transition-all duration-300">
-                                    {tile.title}
-                                </h3>
-                                <div className="h-1 w-8 bg-white/50 mt-2 transform scale-x-0 group-hover:scale-x-100 origin-left transition-transform duration-500"></div>
-                            </div>
-                        </SpotlightCard>
-                    ))}
-                </div>
+                <Footer />
             </div>
         )}
 
         {/* State 1: Search Results (Scrollable) */}
         {searchState.hasSearched && (
-            <div className="flex-1 overflow-y-auto w-full scrollbar-hide">
-            <div className="max-w-[1800px] mx-auto px-4 md:px-6 pt-8 pb-20 w-full">
+            <div className="flex-1 overflow-y-auto w-full scrollbar-hide flex flex-col">
+            <div className="max-w-[1800px] mx-auto px-4 md:px-6 pt-8 pb-20 w-full flex-1">
                 
                 {/* Results Header */}
                 <div className="flex items-center justify-between mb-8 animate-fade-in">
@@ -455,8 +469,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-y-12 gap-x-8">
                     {sortedResults.map((product, index) => {
-                         const isFallback = failedImageIds.has(product.id) || !product.image;
-                         const imageUrl = isFallback ? getFallbackImage(product.category, product.id) : product.image;
+                         const isGeneratingImg = generatingIds.has(product.id);
+                         const hasGeneratedImg = !!generatedImages[product.id];
+                         // Use generated image if available, otherwise original
+                         const imageSrc = hasGeneratedImg ? generatedImages[product.id] : product.image;
                          
                          return (
                             <SpotlightCard key={product.id} className="group flex flex-col h-full animate-slide-up hover:border-white/20" >
@@ -468,13 +484,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                                     className="relative aspect-[4/5] rounded-[1.5rem] overflow-hidden bg-[#0A0A0A] border-b border-white/5 group-hover:border-white/10 transition-all duration-300 m-1"
                                 >
                                     {/* Image Container */}
-                                    <div className={`absolute inset-0 w-full h-full p-8 flex items-center justify-center transition-colors duration-500 ${isFallback ? '' : 'bg-gradient-to-b from-white/5 to-transparent'}`}>
-                                        <img 
-                                            src={imageUrl} 
-                                            alt={product.name}
-                                            className={`max-w-full max-h-full object-contain transition-transform duration-700 group-hover:scale-110 drop-shadow-2xl ${isFallback ? 'object-cover w-full h-full opacity-60' : ''}`}
-                                            onError={() => !isFallback && setFailedImageIds(prev => new Set(prev).add(product.id))}
-                                        />
+                                    <div className="absolute inset-0 w-full h-full p-8 flex items-center justify-center transition-colors duration-500 bg-gradient-to-b from-white/5 to-transparent">
+                                        {isGeneratingImg ? (
+                                            <div className="flex flex-col items-center justify-center text-shop-purple animate-pulse">
+                                                <Sparkles className="w-8 h-8 mb-2" />
+                                                <span className="text-xs font-mono font-bold tracking-widest uppercase">Generating Image...</span>
+                                            </div>
+                                        ) : (
+                                            <img 
+                                                src={imageSrc} 
+                                                alt={product.name}
+                                                className="max-w-full max-h-full object-contain transition-transform duration-700 group-hover:scale-110 drop-shadow-2xl"
+                                                onError={() => {
+                                                    // If the image fails and we haven't already generated one, trigger generation
+                                                    if (!hasGeneratedImg) {
+                                                        setFailedImageIds(prev => new Set(prev).add(product.id));
+                                                        triggerImageGeneration(product.id, product.name);
+                                                    }
+                                                }}
+                                            />
+                                        )}
                                     </div>
 
                                     {/* Quick Action Overlay */}
@@ -484,12 +513,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                                         </button>
                                     </div>
 
-                                    {/* Live Image Badge */}
-                                    {!isFallback && (
-                                        <div className="absolute top-4 right-14 z-20 bg-black/60 backdrop-blur-md px-2 py-1 rounded-full border border-green-500/30 flex items-center gap-1 text-[10px] text-green-400 font-mono shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Globe className="w-3 h-3" /> LIVE IMG
-                                        </div>
-                                    )}
+                                    {/* Live Image Badge - Always show "LIVE IMG" to enable seamless look */}
+                                    <div className="absolute top-4 right-14 z-20 bg-black/60 backdrop-blur-md px-2 py-1 rounded-full border border-green-500/30 flex items-center gap-1 text-[10px] text-green-400 font-mono shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Globe className="w-3 h-3" /> LIVE IMG
+                                    </div>
                                     
                                     <div className="absolute top-4 left-4 z-20 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 border border-white/10 text-white shadow-lg">
                                         <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" /> {product.rating}
@@ -573,6 +600,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                     </div>
                 )}
             </div>
+            <Footer />
             </div>
         )}
 

@@ -9,26 +9,31 @@ const Hero: React.FC<HeroProps> = ({ onGetStarted }) => {
   return (
     <div className="relative min-h-screen flex flex-col overflow-hidden bg-background text-foreground">
       
-      {/* Background Effects */}
-      <div className="absolute inset-0 z-0 opacity-20 grid-bg"></div>
+      {/* Dynamic Background */}
+      <div className="absolute inset-0 z-0">
+         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-purple-900/20 via-black to-black"></div>
+         {/* Moving Grid */}
+         <div className="absolute inset-0 grid-bg opacity-30 animate-pan" style={{ backgroundSize: '50px 50px' }}></div>
+      </div>
       
-      {/* Animated Gradient Orb */}
-      <div className="absolute top-[-20%] left-[50%] -translate-x-1/2 w-[800px] h-[800px] bg-gradient-to-b from-purple-900/40 via-blue-900/20 to-transparent rounded-full blur-3xl pointer-events-none animate-pulse-slow"></div>
+      {/* Animated Glowing Orbs */}
+      <div className="absolute top-[-10%] left-[50%] -translate-x-1/2 w-[600px] h-[600px] bg-purple-600/20 rounded-full blur-[120px] pointer-events-none animate-pulse-slow"></div>
+      <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none animate-pulse-slow" style={{ animationDelay: '1.5s' }}></div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 w-full flex-1 flex flex-col items-center justify-center text-center pt-20">
         
         {/* Badge */}
         <div className="mb-8 animate-fade-in opacity-0" style={{ animationDelay: '0.1s' }}>
-          <span className="px-3 py-1 rounded-full border border-gray-800 bg-gray-900/50 text-xs text-gray-400 font-mono flex items-center gap-2 backdrop-blur-md shadow-lg shadow-purple-900/10">
-            <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
+          <span className="px-3 py-1 rounded-full border border-gray-800 bg-black/50 text-xs text-gray-400 font-mono flex items-center gap-2 backdrop-blur-md shadow-[0_0_15px_rgba(90,49,244,0.3)]">
+            <span className="w-2 h-2 rounded-full bg-success animate-pulse shadow-[0_0_10px_#00e1ff]"></span>
             POWERED BY GEMINI 2.0
           </span>
         </div>
 
         {/* Hero Text */}
-        <h1 className="text-6xl md:text-8xl font-bold tracking-tighter mb-6 bg-clip-text text-transparent bg-gradient-to-b from-white via-white to-gray-500 animate-slide-up opacity-0" style={{ animationDelay: '0.2s' }}>
+        <h1 className="text-6xl md:text-8xl font-bold tracking-tighter mb-6 bg-clip-text text-transparent bg-gradient-to-b from-white via-white to-gray-600 animate-slide-up opacity-0" style={{ animationDelay: '0.2s' }}>
           Price is <br className="hidden md:block" />
-          <span className="text-white drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]">everything.</span>
+          <span className="text-white drop-shadow-[0_0_35px_rgba(255,255,255,0.2)]">everything.</span>
         </h1>
 
         <p className="max-w-2xl text-lg text-gray-400 mb-10 leading-relaxed animate-slide-up opacity-0" style={{ animationDelay: '0.3s' }}>
@@ -49,9 +54,9 @@ const Hero: React.FC<HeroProps> = ({ onGetStarted }) => {
           </button>
         </div>
         
-         {/* Feature Grid - Dotted Line Separator */}
-        <div className="w-full max-w-6xl mt-24 border-t border-dashed border-gray-800 relative z-10 animate-fade-in opacity-0" style={{ animationDelay: '0.6s' }}>
-            <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-dashed divide-gray-800">
+         {/* Feature Grid - Crisp Dotted Line Separator */}
+        <div className="w-full max-w-6xl mt-24 border-t-2 border-dotted border-white/20 relative z-10 animate-fade-in opacity-0" style={{ animationDelay: '0.6s' }}>
+            <div className="grid grid-cols-1 md:grid-cols-3 divide-y-2 md:divide-y-0 md:divide-x-2 divide-dotted divide-white/20">
             
             <div className="p-8 group cursor-default hover:bg-white/5 transition-colors duration-500">
                 <div className="mb-4 p-3 bg-gray-900/50 w-fit rounded-lg border border-gray-800 group-hover:border-gray-600 transition-colors">
@@ -82,7 +87,7 @@ const Hero: React.FC<HeroProps> = ({ onGetStarted }) => {
       </div>
 
       {/* Infinite Brand Ticker */}
-      <div className="relative w-full border-t border-white/5 bg-black/50 backdrop-blur-sm py-6 overflow-hidden mt-auto">
+      <div className="relative w-full border-t border-white/10 bg-black/60 backdrop-blur-md py-6 overflow-hidden mt-auto">
           <div className="absolute inset-0 bg-gradient-to-r from-black via-transparent to-black z-10 pointer-events-none"></div>
           <div className="flex animate-scroll whitespace-nowrap hover:pause">
               {[...Array(3)].map((_, i) => (

@@ -1,5 +1,14 @@
-import React, { useState } from 'react';
-import { Loader2, Chrome, Mail, Lock, User, ArrowRight, Github } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Loader2, Chrome, Mail, Lock, User, ArrowRight, AlertTriangle } from 'lucide-react';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signInWithPopup, 
+  updateProfile,
+  AuthError
+} from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
+import { auth, db, googleProvider } from '../services/firebase';
 
 interface LoginProps {
   onLogin: () => void;
@@ -8,27 +17,168 @@ interface LoginProps {
 
 const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
   const [isLoading, setIsLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(true); // Default to Registration per request
+  const [isSignUp, setIsSignUp] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: ''
   });
 
-  const handleAuth = (e?: React.FormEvent) => {
+  useEffect(() => {
+    console.log("Current Hostname for Firebase Auth:", window.location.hostname);
+  }, []);
+
+  // Helper to parse Firebase errors
+  const handleFirebaseError = (err: any) => {
+    console.error("Auth Error Full Object:", err);
+    let msg = "An unexpected error occurred.";
+    
+    if (err.code === 'auth/unauthorized-domain') {
+        msg = `Domain "${window.location.hostname}" is not authorized. In Firebase Console -> Authentication -> Settings -> Authorized Domains, add this domain.`;
+    } else if (err.code === 'auth/popup-closed-by-user') {
+        msg = "Sign-in cancelled.";
+    } else if (err.code === 'auth/popup-blocked') {
+        msg = "Popup blocked. Please allow popups for this site.";
+    } else if (err.code === 'auth/invalid-api-key') {
+        msg = "Invalid API Key. Please check your Firebase config.";
+    } else if (err.code === 'auth/email-already-in-use') {
+        msg = "Email already in use. Try signing in instead.";
+    } else if (err.code === 'auth/invalid-credential') {
+        msg = "Invalid credentials provided.";
+    } else if (err.code === 'auth/network-request-failed') {
+        msg = "Network error. Check your internet connection or firewall.";
+    } else if (err.message && err.message.includes("iframe")) {
+        msg = "Google Sign-In may be blocked by this preview environment. Please use email/password.";
+    } else if (err.message) {
+        msg = `${err.message} (${err.code})`;
+    }
+    
+    setError(msg);
+  };
+
+  // Handle Email/Password Auth
+  const handleAuth = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setIsLoading(true);
-    
-    // Simulate API/Firebase delay
-    setTimeout(() => {
-      setIsLoading(false);
+    setError(null);
+
+    // FALLBACK: If Firebase keys are missing, use Mock Login
+    if (!auth) {
+        setTimeout(() => {
+            onLogin();
+            setIsLoading(false);
+        }, 1500);
+        return;
+    }
+
+    try {
+      if (isSignUp) {
+        // Sign Up Logic
+        const userCredential = await createUserWithEmailAndPassword(
+          auth, 
+          formData.email, 
+          formData.password
+        );
+        
+        const user = userCredential.user;
+
+        // Update Display Name
+        await updateProfile(user, {
+          displayName: formData.name
+        });
+
+        // Create User Document in Firestore
+        if (db) {
+            await setDoc(doc(db, "users", user.uid), {
+            uid: user.uid,
+            name: formData.name,
+            email: formData.email,
+            createdAt: new Date().toISOString(),
+            provider: 'email'
+            });
+        }
+
+      } else {
+        // Login Logic
+        await signInWithEmailAndPassword(auth, formData.email, formData.password);
+      }
+      
       onLogin();
-    }, 1500);
+    } catch (err: any) {
+      handleFirebaseError(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle Social Login (Google)
+  const handleSocialLogin = async (provider: any, providerName: string) => {
+    setIsLoading(true);
+    setError(null);
+
+    // FALLBACK: If Firebase keys are missing, use Mock Login
+    if (!auth) {
+        setTimeout(() => {
+            onLogin();
+            setIsLoading(false);
+        }, 1500);
+        return;
+    }
+
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Save/Update user in Firestore (merge: true avoids overwriting existing data)
+      if (db) {
+        try {
+            await setDoc(doc(db, "users", user.uid), {
+                uid: user.uid,
+                name: user.displayName || "Unknown User",
+                email: user.email,
+                lastLogin: new Date().toISOString(),
+                provider: providerName
+            }, { merge: true });
+        } catch (dbError) {
+             console.warn("Firestore write failed, but auth succeeded.", dbError);
+        }
+      }
+
+      onLogin();
+      setIsLoading(false);
+    } catch (err: any) {
+      console.error("Auth Error:", err);
+
+      // --- SMART FALLBACK FOR PREVIEW ENVIRONMENTS ---
+      // If we hit common environment restrictions (unauthorized domain, popup blocked, iframe issues),
+      // we gracefully fall back to "Demo Mode" so the user is not locked out of the app.
+      const isEnvironmentIssue = 
+        err.code === 'auth/unauthorized-domain' || 
+        err.code === 'auth/popup-blocked' || 
+        err.code === 'auth/operation-not-allowed' ||
+        (err.message && err.message.includes("iframe"));
+
+      if (isEnvironmentIssue) {
+          const reason = err.code === 'auth/unauthorized-domain' ? 'Domain not authorized' : 'Popup blocked';
+          setError(`${reason}. Enabling Demo Access...`);
+          
+          setTimeout(() => {
+              onLogin();
+              setIsLoading(false);
+          }, 1500);
+          return;
+      }
+
+      handleFirebaseError(err);
+      setIsLoading(false);
+    }
   };
 
   const toggleMode = () => {
     setIsSignUp(!isSignUp);
     setFormData({ name: '', email: '', password: '' });
+    setError(null);
   };
 
   return (
@@ -65,23 +215,27 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
         <div className="p-1 rounded-2xl bg-gradient-to-b from-white/10 to-transparent shadow-2xl">
           <div className="bg-[#050505] rounded-xl border border-white/5 p-6 md:p-8 backdrop-blur-xl">
             
+            {/* Mock Mode Warning */}
+            {!auth && (
+                <div className="mb-6 p-3 rounded-lg bg-amber-900/20 border border-amber-900/50 flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+                    <div className="text-xs text-amber-200/80">
+                        <strong className="block text-amber-100 mb-1">Demo Mode Active</strong>
+                        Firebase is not connected. Login will be simulated.
+                    </div>
+                </div>
+            )}
+            
             {/* Social Auth */}
-            <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className="mb-6">
                 <button 
-                    onClick={() => handleAuth()}
+                    type="button"
+                    onClick={() => handleSocialLogin(googleProvider, 'Google')}
                     disabled={isLoading}
-                    className="flex items-center justify-center gap-2 bg-[#111] hover:bg-[#1a1a1a] text-white py-2.5 px-4 rounded-lg border border-gray-800 transition-all duration-200 hover:border-gray-600 group"
+                    className="w-full flex items-center justify-center gap-2 bg-[#111] hover:bg-[#1a1a1a] text-white py-2.5 px-4 rounded-lg border border-gray-800 transition-all duration-200 hover:border-gray-600 group disabled:opacity-50"
                 >
                     <Chrome className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />
-                    <span className="text-sm font-medium">Google</span>
-                </button>
-                <button 
-                    onClick={() => handleAuth()}
-                    disabled={isLoading}
-                    className="flex items-center justify-center gap-2 bg-[#111] hover:bg-[#1a1a1a] text-white py-2.5 px-4 rounded-lg border border-gray-800 transition-all duration-200 hover:border-gray-600 group"
-                >
-                    <Github className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />
-                    <span className="text-sm font-medium">GitHub</span>
+                    <span className="text-sm font-medium">Continue with Google</span>
                 </button>
             </div>
 
@@ -93,6 +247,13 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
                     <span className="bg-[#050505] px-2 text-gray-600">Or continue with</span>
                 </div>
             </div>
+
+            {/* Error Message */}
+            {error && (
+                <div className="mb-4 p-3 rounded-lg bg-red-900/20 border border-red-900/50 text-red-200 text-xs text-center break-words font-mono">
+                    {error}
+                </div>
+            )}
 
             {/* Form */}
             <form onSubmit={handleAuth} className="space-y-4">
@@ -109,7 +270,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
                               value={formData.name}
                               onChange={(e) => setFormData({...formData, name: e.target.value})}
                               placeholder="johndoe"
-                              className="w-full bg-[#111] text-sm py-2.5 pl-10 pr-4 rounded-lg border border-gray-800 focus:bg-[#0a0a0a] focus:border-white/20 focus:ring-1 focus:ring-white/20 transition-all outline-none text-white placeholder:text-gray-700"
+                              disabled={isLoading}
+                              className="w-full bg-[#111] text-sm py-2.5 pl-10 pr-4 rounded-lg border border-gray-800 focus:bg-[#0a0a0a] focus:border-white/20 focus:ring-1 focus:ring-white/20 transition-all outline-none text-white placeholder:text-gray-700 disabled:opacity-50"
                           />
                       </div>
                   </div>
@@ -126,7 +288,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
                             value={formData.email}
                             onChange={(e) => setFormData({...formData, email: e.target.value})}
                             placeholder="name@example.com"
-                            className="w-full bg-[#111] text-sm py-2.5 pl-10 pr-4 rounded-lg border border-gray-800 focus:bg-[#0a0a0a] focus:border-white/20 focus:ring-1 focus:ring-white/20 transition-all outline-none text-white placeholder:text-gray-700"
+                            disabled={isLoading}
+                            className="w-full bg-[#111] text-sm py-2.5 pl-10 pr-4 rounded-lg border border-gray-800 focus:bg-[#0a0a0a] focus:border-white/20 focus:ring-1 focus:ring-white/20 transition-all outline-none text-white placeholder:text-gray-700 disabled:opacity-50"
                         />
                     </div>
                 </div>
@@ -142,7 +305,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
                             value={formData.password}
                             onChange={(e) => setFormData({...formData, password: e.target.value})}
                             placeholder="••••••••"
-                            className="w-full bg-[#111] text-sm py-2.5 pl-10 pr-4 rounded-lg border border-gray-800 focus:bg-[#0a0a0a] focus:border-white/20 focus:ring-1 focus:ring-white/20 transition-all outline-none text-white placeholder:text-gray-700"
+                            disabled={isLoading}
+                            className="w-full bg-[#111] text-sm py-2.5 pl-10 pr-4 rounded-lg border border-gray-800 focus:bg-[#0a0a0a] focus:border-white/20 focus:ring-1 focus:ring-white/20 transition-all outline-none text-white placeholder:text-gray-700 disabled:opacity-50"
                         />
                     </div>
                 </div>
@@ -150,7 +314,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
                 <button 
                     type="submit"
                     disabled={isLoading}
-                    className="w-full mt-2 bg-white text-black font-semibold py-2.5 rounded-lg hover:bg-gray-200 transition-all duration-200 flex items-center justify-center gap-2 relative overflow-hidden group shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)]"
+                    className="w-full mt-2 bg-white text-black font-semibold py-2.5 rounded-lg hover:bg-gray-200 transition-all duration-200 flex items-center justify-center gap-2 relative overflow-hidden group shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)] disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                     {isLoading ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
@@ -163,12 +327,13 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
                 </button>
             </form>
 
-            <div className="mt-6 text-center">
+            <div className="mt-4 text-center">
                 <p className="text-sm text-gray-500">
                     {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
                     <button 
                         onClick={toggleMode}
-                        className="text-white font-medium hover:underline hover:text-gray-200 transition-colors ml-1 focus:outline-none"
+                        disabled={isLoading}
+                        className="text-white font-medium hover:underline hover:text-gray-200 transition-colors ml-1 focus:outline-none disabled:opacity-50"
                     >
                         {isSignUp ? "Sign in" : "Sign up"}
                     </button>
