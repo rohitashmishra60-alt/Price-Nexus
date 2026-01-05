@@ -6,8 +6,9 @@
     <title>PriceNexus - AI Price Intelligence</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Process shim for browser environment
-      window.process = { env: { API_KEY: '' } };
+      // Safe Process shim for browser environment - prevents overwriting actual env vars
+      window.process = window.process || { env: {} };
+      window.process.env = window.process.env || {};
 
       tailwind.config = {
         theme: {

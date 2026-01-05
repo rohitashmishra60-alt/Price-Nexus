@@ -1,6 +1,6 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { Product } from "../types";
+import { searchMockProducts } from "./mockData";
 
 // Helper to sanitize JSON from Markdown code blocks or raw text
 const cleanJson = (text: string) => {
@@ -20,8 +20,15 @@ const cleanJson = (text: string) => {
  * Acts as a Universal API Bridge using Gemini 3 Flash Preview.
  */
 export const searchProducts = async (query: string): Promise<Product[]> => {
-  // Always use new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Always initialize fresh for each call as per SDK guidelines
+  const apiKey = process.env.API_KEY;
+  
+  if (!apiKey) {
+      console.warn("API_KEY missing, falling back to mock data.");
+      return searchMockProducts(query);
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   const model = "gemini-3-flash-preview"; 
 
   const prompt = `
@@ -72,7 +79,6 @@ export const searchProducts = async (query: string): Promise<Product[]> => {
       }
     });
 
-    // Use .text property directly
     const text = response.text || "{}";
     const cleanedText = cleanJson(text);
     const data = JSON.parse(cleanedText);
@@ -106,23 +112,24 @@ export const searchProducts = async (query: string): Promise<Product[]> => {
                 };
             });
     }
-    return [];
+    return searchMockProducts(query);
   } catch (error) {
-    console.error("Gemini Universal API Error:", error);
-    return [];
+    console.error("Gemini Search Error, falling back to mock:", error);
+    return searchMockProducts(query);
   }
 };
 
 export const analyzeProductValue = async (product: Product): Promise<string> => {
-  // Always use new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) return "AI Analysis unavailable (Missing API Key).";
+
+  const ai = new GoogleGenAI({ apiKey });
   const model = "gemini-3-flash-preview";
   const offersText = product.offers.map(o => `${o.store}: ₹${o.price}`).join('\n');
   const prompt = `Analyze this deal for the Indian market: Product: ${product.name}\nOffers:\n${offersText}\nVerdict: Great Buy, Fair Price, or Wait? Max 40 words.`;
 
   try {
     const response = await ai.models.generateContent({ model, contents: prompt });
-    // Use .text property directly
     return response.text || "Analysis unavailable.";
   } catch (error) {
     return "Could not analyze value at this moment.";
@@ -130,8 +137,10 @@ export const analyzeProductValue = async (product: Product): Promise<string> => 
 };
 
 export const getChatResponse = async (history: { role: 'user' | 'model', text: string }[], newMessage: string): Promise<string> => {
-  // Always use new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) return "I'm offline (Missing API Key). How can I help with the demo products?";
+
+  const ai = new GoogleGenAI({ apiKey });
   const model = "gemini-3-pro-preview";
   const contents = [
     ...history.map(msg => ({
@@ -149,16 +158,17 @@ export const getChatResponse = async (history: { role: 'user' | 'model', text: s
       contents,
       config: { systemInstruction, temperature: 0.7 }
     });
-    // Use .text property directly
     return response.text || "I'm not sure how to answer that right now.";
   } catch (error) {
-    return "I'm having trouble connecting to the server.";
+    return "I'm having trouble connecting to the Gemini server.";
   }
 };
 
 export const generateProductImage = async (productName: string): Promise<string | null> => {
-  // Always use new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) return null;
+
+  const ai = new GoogleGenAI({ apiKey });
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
