@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Loader2, Chrome, ArrowRight, AlertTriangle } from 'lucide-react';
+import { Loader2, Chrome, ArrowRight, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
@@ -75,6 +75,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
       }
       onLogin();
     } catch (err: any) {
+      if (err.code === 'auth/unauthorized-domain') {
+          setIsDomainError(true);
+      }
       handleFirebaseError(err);
     } finally {
       setIsLoading(false);
@@ -95,6 +98,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
       await signInWithPopup(auth, provider);
       onLogin();
     } catch (err: any) {
+      if (err.code === 'auth/unauthorized-domain') {
+          setIsDomainError(true);
+      }
       handleFirebaseError(err);
     } finally {
       setIsLoading(false);
@@ -125,26 +131,24 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
         <div className="p-1 rounded-2xl bg-gradient-to-b from-white/10 to-transparent shadow-2xl">
           <div className="bg-[#050505] rounded-xl border border-white/5 p-6 md:p-8 backdrop-blur-xl">
             
-            {isDomainError && (
-                <div className="mb-6 p-5 rounded-xl bg-amber-900/20 border border-amber-500/30 animate-pulse-slow">
+            {isDomainError ? (
+                <div className="mb-6 p-5 rounded-xl bg-amber-900/20 border border-amber-500/30 animate-fade-in">
                     <div className="flex items-center gap-3 mb-3">
                         <AlertTriangle className="w-6 h-6 text-amber-500" />
-                        <span className="text-sm font-bold text-amber-200">Firebase Setup Required</span>
+                        <span className="text-sm font-bold text-amber-200 uppercase tracking-wider">Domain Restriction</span>
                     </div>
                     <p className="text-xs text-amber-200/70 mb-4 leading-relaxed">
-                        This Vercel domain isn't authorized in your Firebase Console. 
-                        Add <b>{window.location.hostname}</b> to 'Authorized Domains' under Authentication.
+                        Domain <b>{window.location.hostname}</b> is not authorized in your Firebase Console. 
+                        Please add it to your Authorized Domains list.
                     </p>
                     <button 
                         onClick={onLogin}
-                        className="w-full py-3 bg-white text-black text-xs font-black rounded-lg border border-white transition-all hover:bg-gray-200"
+                        className="w-full py-4 bg-white text-black text-xs font-black rounded-lg border border-white transition-all hover:bg-gray-200 shadow-xl flex items-center justify-center gap-2"
                     >
-                        SKIP TO DEMO MODE
+                        <ShieldCheck className="w-4 h-4" /> CONTINUE AS GUEST
                     </button>
                 </div>
-            )}
-            
-            {!isDomainError && (
+            ) : (
                 <>
                     <button 
                         type="button"
@@ -161,7 +165,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
                         <div className="relative flex justify-center text-xs uppercase"><span className="bg-[#050505] px-2 text-gray-600">Or email</span></div>
                     </div>
 
-                    {error && !isDomainError && <div className="mb-4 p-3 rounded-lg bg-red-900/20 border border-red-900/50 text-red-200 text-xs text-center font-mono">{error}</div>}
+                    {error && <div className="mb-4 p-3 rounded-lg bg-red-900/20 border border-red-900/50 text-red-200 text-xs text-center font-mono">{error}</div>}
 
                     <form onSubmit={handleAuth} className="space-y-4">
                         {isSignUp && (

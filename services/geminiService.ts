@@ -1,6 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
 import { Product } from "../types";
-import { searchMockProducts } from "./mockData";
 
 // Helper to sanitize JSON from Markdown code blocks or raw text
 const cleanJson = (text: string) => {
@@ -18,58 +17,60 @@ const cleanJson = (text: string) => {
 
 /**
  * Acts as a Universal API Bridge using Gemini 3 Flash Preview.
- * If the API call fails or the key is missing, it falls back to high-quality mock data.
  */
 export const searchProducts = async (query: string): Promise<Product[]> => {
+  // Use process.env.API_KEY exclusively as per guidelines.
   const apiKey = process.env.API_KEY;
   
-  if (!apiKey || apiKey.length < 5) {
-      console.warn("PriceNexus: Gemini API_KEY is missing or invalid in process.env. Falling back to Demo Mode with mock data.");
-      return searchMockProducts(query);
+  if (!apiKey) {
+      console.error("PriceNexus: Gemini API_KEY is missing from environment.");
+      return []; 
   }
 
+  // Always initialize GoogleGenAI with a named parameter using process.env.API_KEY.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const model = "gemini-3-flash-preview"; 
+
+  const prompt = `
+    You are a high-performance e-commerce API aggregator. 
+    User Query: "${query}"
+    
+    ACTION: Perform a live Google Search for "${query} buy online price india" to find current product listings AND images.
+    
+    DATA EXTRACTION RULES:
+    1.  Identify EXACTLY 10-12 DISTINCT and RELEVANT product models matching "${query}".
+    2.  For EACH product, find the single BEST available price/offer.
+    3.  EXTRACT the specific current price in INR.
+    4.  EXTRACT the direct product URL.
+    5.  EXTRACT the ACTUAL Product Image URL. 
+    6.  GENERATE a concise list of key features (max 2 items).
+    
+    OUTPUT FORMAT: Strictly VALID JSON.
+    {
+      "products": [
+        {
+          "id": "unique_id_string",
+          "name": "Exact Product Name",
+          "image": "https://valid-image-url...", 
+          "category": "Category Name",
+          "rating": 4.5,
+          "features": ["Feature 1", "Feature 2"],
+          "offers": [
+            {
+              "store": "Amazon.in",
+              "price": 9999,
+              "currency": "INR",
+              "url": "https://www.amazon.in/...", 
+              "inStock": true
+            }
+          ]
+        }
+      ]
+    }
+  `;
+
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const model = "gemini-3-flash-preview"; 
-
-    const prompt = `
-      You are a high-performance e-commerce API aggregator. 
-      User Query: "${query}"
-      
-      ACTION: Perform a live Google Search for "${query} buy online price india" to find current product listings AND images.
-      
-      DATA EXTRACTION RULES:
-      1.  Identify EXACTLY 10-12 DISTINCT and RELEVANT product models matching "${query}".
-      2.  For EACH product, find the single BEST available price/offer.
-      3.  EXTRACT the specific current price in INR.
-      4.  EXTRACT the direct product URL.
-      5.  EXTRACT the ACTUAL Product Image URL. 
-      6.  GENERATE a concise list of key features (max 2 items).
-      
-      OUTPUT FORMAT: Strictly VALID JSON.
-      {
-        "products": [
-          {
-            "id": "unique_id_string",
-            "name": "Exact Product Name",
-            "image": "https://valid-image-url...", 
-            "category": "Category Name",
-            "rating": 4.5,
-            "features": ["Feature 1", "Feature 2"],
-            "offers": [
-              {
-                "store": "Amazon.in",
-                "price": 9999,
-                "currency": "INR",
-                "url": "https://www.amazon.in/...", 
-                "inStock": true
-              }
-            ]
-          }
-        ]
-      }
-    `;
-
+    // Perform search using googleSearch grounding.
     const response = await ai.models.generateContent({
       model,
       contents: prompt,
@@ -79,12 +80,15 @@ export const searchProducts = async (query: string): Promise<Product[]> => {
       }
     });
 
+    // Access text directly as a property (not a method).
     const text = response.text || "{}";
     const cleanedText = cleanJson(text);
     const data = JSON.parse(cleanedText);
+    
+    // Extract grounding chunks for source attribution as per guidelines.
     const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
-    if (data.products && Array.isArray(data.products) && data.products.length > 0) {
+    if (data.products && Array.isArray(data.products)) {
         return data.products
             .filter((p: any) => p.name)
             .map((p: any, index: number) => {
@@ -112,23 +116,18 @@ export const searchProducts = async (query: string): Promise<Product[]> => {
                 };
             });
     }
-    
-    // If structured data parsing fails, try one more attempt with mock data
-    return searchMockProducts(query);
-  } catch (error: any) {
-    console.error("PriceNexus Gemini Error:", error);
-    if (error.message?.includes("API key not valid")) {
-        console.error("TROUBLESHOOTING: Ensure your Gemini API Key is set correctly in Vercel's Environment Variables (Settings -> Environment Variables -> Key: API_KEY).");
-    }
-    return searchMockProducts(query);
+    return [];
+  } catch (error) {
+    console.error("Gemini Search Execution Error:", error);
+    return [];
   }
 };
 
 export const analyzeProductValue = async (product: Product): Promise<string> => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) return "AI Analysis unavailable (Missing API Key). However, based on the current market data, this appears to be a solid value proposition for the features offered.";
+  if (!apiKey) return "AI Analysis unavailable (Missing API Key).";
 
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const model = "gemini-3-flash-preview";
   const offersText = product.offers.map(o => `${o.store}: ₹${o.price}`).join('\n');
   const prompt = `Analyze this deal for the Indian market: Product: ${product.name}\nOffers:\n${offersText}\nVerdict: Great Buy, Fair Price, or Wait? Max 40 words.`;
@@ -137,27 +136,27 @@ export const analyzeProductValue = async (product: Product): Promise<string> => 
     const response = await ai.models.generateContent({ model, contents: prompt });
     return response.text || "Analysis unavailable.";
   } catch (error) {
-    return "Could not perform deep analysis at this time. Most retailers are listing this within the standard price range.";
+    return "Could not analyze value at this moment.";
   }
 };
 
 export const getChatResponse = async (history: { role: 'user' | 'model', text: string }[], newMessage: string): Promise<string> => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) return "I'm currently in Demo Mode (API Key missing). I can still help you browse the current selection, but my live search powers are limited!";
+  if (!apiKey) return "I'm offline (Missing API Key). How can I help with the demo products?";
 
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const model = "gemini-3-pro-preview";
+  const contents = [
+    ...history.map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.text }]
+    })),
+    { role: 'user', parts: [{ text: newMessage }] }
+  ];
+  
+  const systemInstruction = "You are PriceNexus AI, a concise and expert shopping assistant for the Indian market.";
+  
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const model = "gemini-3-pro-preview";
-    const contents = [
-      ...history.map(msg => ({
-        role: msg.role === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.text }]
-      })),
-      { role: 'user', parts: [{ text: newMessage }] }
-    ];
-    
-    const systemInstruction = "You are PriceNexus AI, a concise and expert shopping assistant for the Indian market.";
-    
     const response = await ai.models.generateContent({
       model,
       contents,
@@ -165,7 +164,7 @@ export const getChatResponse = async (history: { role: 'user' | 'model', text: s
     });
     return response.text || "I'm not sure how to answer that right now.";
   } catch (error) {
-    return "I'm having trouble connecting to my central brain. How else can I assist you?";
+    return "I'm having trouble connecting to the Gemini server.";
   }
 };
 
@@ -173,14 +172,15 @@ export const generateProductImage = async (productName: string): Promise<string 
   const apiKey = process.env.API_KEY;
   if (!apiKey) return null;
 
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
-        parts: [{ text: `High-quality product photography of ${productName} on a clean, professional studio background.` }],
+        parts: [{ text: `High-quality product photography of ${productName} on a white background.` }],
       },
     });
+    // Iterate through all parts to find the image part as per nano banana guidelines.
     if (response.candidates?.[0]?.content?.parts) {
         for (const part of response.candidates[0].content.parts) {
             if (part.inlineData && part.inlineData.data) {
