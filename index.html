@@ -6,6 +6,9 @@
     <title>PriceNexus - AI Price Intelligence</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
+      // Process shim for browser environment
+      window.process = { env: { API_KEY: '' } };
+
       tailwind.config = {
         theme: {
           extend: {
@@ -133,5 +136,6 @@
 </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="index.tsx"></script>
   </body>
 </html>

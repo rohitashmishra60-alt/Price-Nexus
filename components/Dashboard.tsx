@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Sparkles, ShoppingBag, Star, Heart, Menu, User, ArrowRight, Loader2, Zap, TrendingUp, X, Globe, Server, Database } from 'lucide-react';
 import { Product, SearchState } from '../types';
@@ -57,7 +58,8 @@ const Footer = () => (
 );
 
 // --- Spotlight Card Component ---
-const SpotlightCard = ({ children, className = "", onClick }: { children: React.ReactNode; className?: string, onClick?: () => void }) => {
+// Added React.FC to fix "Property 'key' does not exist" TS error when used in loops
+const SpotlightCard: React.FC<{ children: React.ReactNode; className?: string; onClick?: () => void }> = ({ children, className = "", onClick }) => {
   const divRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [opacity, setOpacity] = useState(0);
