@@ -6,8 +6,14 @@
     <title>PriceNexus - AI Price Intelligence</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Safe Process shim for browser environment - prevents overwriting actual env vars
-      window.process = window.process || { env: {} };
+      /**
+       * Safe Process shim for browser environment.
+       * We use a non-destructive check to ensure that if the environment (like Vercel) 
+       * provides process.env.API_KEY via a global or injection, we don't wipe it.
+       */
+      if (typeof window.process === 'undefined') {
+        window.process = { env: {} };
+      }
       window.process.env = window.process.env || {};
 
       tailwind.config = {

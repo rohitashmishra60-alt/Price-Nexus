@@ -1,6 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
 import { Product } from "../types";
-import { searchMockProducts } from "./mockData";
 
 // Helper to sanitize JSON from Markdown code blocks or raw text
 const cleanJson = (text: string) => {
@@ -20,12 +19,11 @@ const cleanJson = (text: string) => {
  * Acts as a Universal API Bridge using Gemini 3 Flash Preview.
  */
 export const searchProducts = async (query: string): Promise<Product[]> => {
-  // Always initialize fresh for each call as per SDK guidelines
   const apiKey = process.env.API_KEY;
   
   if (!apiKey) {
-      console.warn("API_KEY missing, falling back to mock data.");
-      return searchMockProducts(query);
+      console.error("PriceNexus: Gemini API_KEY is missing from environment. Vercel search requires this variable to be set in Project Settings.");
+      return []; // Return empty to allow Dashboard to handle the fallback warning correctly
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -112,10 +110,10 @@ export const searchProducts = async (query: string): Promise<Product[]> => {
                 };
             });
     }
-    return searchMockProducts(query);
+    return [];
   } catch (error) {
-    console.error("Gemini Search Error, falling back to mock:", error);
-    return searchMockProducts(query);
+    console.error("Gemini Search Execution Error:", error);
+    return [];
   }
 };
 

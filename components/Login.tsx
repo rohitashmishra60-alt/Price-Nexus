@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Loader2, Chrome, Mail, Lock, User, ArrowRight, AlertTriangle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Loader2, Chrome, ArrowRight, AlertTriangle } from 'lucide-react';
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
@@ -25,7 +25,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
     password: ''
   });
 
-  // Helper to parse Firebase errors
   const handleFirebaseError = (err: any) => {
     console.error("Auth Error Full Object:", err);
     let msg = "An unexpected error occurred.";
@@ -127,17 +126,20 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
           <div className="bg-[#050505] rounded-xl border border-white/5 p-6 md:p-8 backdrop-blur-xl">
             
             {isDomainError && (
-                <div className="mb-6 p-4 rounded-xl bg-amber-900/20 border border-amber-900/50">
-                    <div className="flex items-center gap-3 mb-2">
-                        <AlertTriangle className="w-5 h-5 text-amber-500" />
-                        <span className="text-sm font-bold text-amber-200">Unauthorized Domain</span>
+                <div className="mb-6 p-5 rounded-xl bg-amber-900/20 border border-amber-500/30 animate-pulse-slow">
+                    <div className="flex items-center gap-3 mb-3">
+                        <AlertTriangle className="w-6 h-6 text-amber-500" />
+                        <span className="text-sm font-bold text-amber-200">Firebase Setup Required</span>
                     </div>
-                    <p className="text-xs text-amber-200/60 mb-4">Firebase Auth is restricted. You can continue using a demo session.</p>
+                    <p className="text-xs text-amber-200/70 mb-4 leading-relaxed">
+                        This Vercel domain isn't authorized in your Firebase Console. 
+                        Add <b>{window.location.hostname}</b> to 'Authorized Domains' under Authentication.
+                    </p>
                     <button 
                         onClick={onLogin}
-                        className="w-full py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-xs font-bold rounded-lg border border-amber-500/30 transition-all"
+                        className="w-full py-3 bg-white text-black text-xs font-black rounded-lg border border-white transition-all hover:bg-gray-200"
                     >
-                        ENTER DEMO MODE
+                        SKIP TO DEMO MODE
                     </button>
                 </div>
             )}
