@@ -1,8 +1,6 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Sparkles, ShoppingBag, Star, Heart, Menu, User, ArrowRight, Loader2, Zap, TrendingUp, X, Globe, Server, Database } from 'lucide-react';
 import { Product, SearchState } from '../types';
-import { searchMockProducts } from '../services/mockData';
 import { searchProducts, analyzeProductValue, generateProductImage } from '../services/geminiService';
 import ChatBot from './ChatBot';
 
@@ -27,7 +25,6 @@ const getSafeHostname = (url: string): string => {
     }
 };
 
-// --- Footer Component ---
 const Footer = () => (
     <footer className="w-full border-t border-white/5 bg-black/40 backdrop-blur-md py-8 mt-auto shrink-0 z-20 relative">
         <div className="max-w-[1800px] mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
@@ -38,16 +35,14 @@ const Footer = () => (
                     </div>
                     <div className="flex flex-col">
                         <span className="font-bold text-gray-200 text-sm tracking-tight">PriceNexus</span>
-                        <span className="text-[10px] text-gray-500">© 2024 All rights reserved.</span>
+                        <span className="text-[10px] text-gray-500">© 2024 GDG Hackathon.</span>
                     </div>
                 </div>
             </div>
             
             <div className="flex items-center gap-8 text-xs font-medium text-gray-500">
-                <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
-                <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
-                <a href="#" className="hover:text-white transition-colors">API Documentation</a>
-                <div className="h-4 w-px bg-white/10 hidden md:block"></div>
+                <a href="#" className="hover:text-white transition-colors">Privacy</a>
+                <a href="#" className="hover:text-white transition-colors">Terms</a>
                 <div className="flex items-center gap-2 text-green-500/80 bg-green-500/5 px-3 py-1.5 rounded-full border border-green-500/10">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
                     Systems Operational
@@ -57,8 +52,6 @@ const Footer = () => (
     </footer>
 );
 
-// --- Spotlight Card Component ---
-// Added React.FC to fix "Property 'key' does not exist" TS error when used in loops
 const SpotlightCard: React.FC<{ children: React.ReactNode; className?: string; onClick?: () => void }> = ({ children, className = "", onClick }) => {
   const divRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -103,15 +96,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [displayedAnalysis, setDisplayedAnalysis] = useState('');
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
-  const [usedFallback, setUsedFallback] = useState(false);
-  const [failedImageIds, setFailedImageIds] = useState<Set<string>>(new Set());
   const [loadingStatus, setLoadingStatus] = useState("Initializing connection...");
+  const [isApiKeyMissing, setIsApiKeyMissing] = useState(false);
   
-  // Image Generation State
   const [generatedImages, setGeneratedImages] = useState<Record<string, string>>({});
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
 
-  // Typing effect for analysis
   useEffect(() => {
     if (analysis) {
         setDisplayedAnalysis('');
@@ -125,54 +115,40 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     }
   }, [analysis]);
 
-  // Loading Status Cycler
   useEffect(() => {
       if (searchState.isLoading) {
           const statuses = [
-              "Handshaking with Amazon.in API...",
-              "Querying Flipkart inventory...",
-              "Fetching prices from Croma...",
-              "Checking Reliance Digital stock...",
-              "Aggregating cross-platform data...",
-              "Gemini AI validating deals..."
+              "Synchronizing with Market APIs...",
+              "Querying Live Inventory...",
+              "Validating Price Grounding...",
+              "Gemini AI analyzing value...",
+              "Aggregating Best Deals..."
           ];
           let i = 0;
           setLoadingStatus(statuses[0]);
           const interval = setInterval(() => {
               i = (i + 1) % statuses.length;
               setLoadingStatus(statuses[i]);
-          }, 800); // Change status every 800ms
+          }, 800);
           return () => clearInterval(interval);
       }
   }, [searchState.isLoading]);
 
-  // Handle automatic image generation for products with no images
   useEffect(() => {
     searchState.results.forEach(product => {
-        if (!product.image) {
+        if (!product.image && !generatingIds.has(product.id) && !generatedImages[product.id]) {
             triggerImageGeneration(product.id, product.name);
         }
     });
   }, [searchState.results]);
 
   const triggerImageGeneration = async (id: string, name: string) => {
-    if (generatingIds.has(id) || generatedImages[id]) return;
-    
+    if (!process.env.API_KEY) return;
     setGeneratingIds(prev => new Set(prev).add(id));
-    
-    // Call Gemini 2.5 Flash Image via service
     const imgData = await generateProductImage(name);
-    
     if (imgData) {
         setGeneratedImages(prev => ({ ...prev, [id]: imgData }));
-        // Also remove from failed IDs if it was there
-        setFailedImageIds(prev => {
-            const next = new Set(prev);
-            next.delete(id);
-            return next;
-        });
     }
-    
     setGeneratingIds(prev => {
         const next = new Set(prev);
         next.delete(id);
@@ -185,24 +161,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     if (!searchState.query.trim()) return;
 
     setSearchState(prev => ({ ...prev, isLoading: true, hasSearched: true, results: [] }));
-    setUsedFallback(false);
+    setIsApiKeyMissing(!process.env.API_KEY);
     setAnalysis(null); 
-    setFailedImageIds(new Set());
-    setGeneratedImages({}); // Reset generated images
+    setGeneratedImages({});
     setGeneratingIds(new Set());
     
     try {
-        // Use Gemini Universal API Bridge to search
-        let products = await searchProducts(searchState.query);
-        
-        if (!products || products.length === 0) {
-            // Fallback only if AI bridge completely fails (e.g. no API key)
-            products = await searchMockProducts(searchState.query);
-            // Only toggle fallback if we actually got fallback results
-            if (products.length > 0) {
-               setUsedFallback(true);
-            }
-        }
+        const products = await searchProducts(searchState.query);
         setSearchState(prev => ({ 
             ...prev, 
             isLoading: false, 
@@ -229,7 +194,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         hasSearched: false,
     });
     setAnalysis(null);
-    setUsedFallback(false);
   };
 
   const formatCurrency = (amount: number, currency: string) => {
@@ -240,37 +204,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   };
 
   const sortedResults = useMemo(() => {
-    return [...searchState.results]
-        .sort((a, b) => {
-            const pricesA = a.offers.map(o => o.price).filter(p => typeof p === 'number' && p > 0);
-            const minA = pricesA.length > 0 ? Math.min(...pricesA) : Infinity;
-            const pricesB = b.offers.map(o => o.price).filter(p => typeof p === 'number' && p > 0);
-            const minB = pricesB.length > 0 ? Math.min(...pricesB) : Infinity;
-            
-            // Push items with no price (Infinity) to the bottom
-            if (minA === Infinity && minB === Infinity) return 0;
-            if (minA === Infinity) return 1;
-            if (minB === Infinity) return -1;
-            
+    return [...searchState.results].sort((a, b) => {
+            const minA = a.offers.length > 0 ? Math.min(...a.offers.map(o => o.price)) : Infinity;
+            const minB = b.offers.length > 0 ? Math.min(...b.offers.map(o => o.price)) : Infinity;
             return minA - minB;
     });
   }, [searchState.results]);
 
   return (
     <div className="h-screen bg-[#000] text-white font-sans selection:bg-shop-purple/30 flex flex-col overflow-hidden">
-      
-      {/* Background Ambience */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
          <div className="absolute top-[-20%] left-[20%] w-[800px] h-[800px] bg-shop-purple/5 rounded-full blur-[150px] animate-pulse-slow"></div>
-         <div className="absolute top-[40%] right-[-10%] w-[600px] h-[600px] bg-blue-900/5 rounded-full blur-[150px] animate-pulse-slow" style={{ animationDelay: '2s' }}></div>
          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-15 brightness-100 contrast-150 mix-blend-overlay"></div>
       </div>
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/5 h-16 shrink-0 transition-all duration-300">
+      <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/5 h-16 shrink-0">
         <div className="max-w-[1800px] mx-auto px-4 md:px-6 h-full flex items-center justify-between">
             <div className="flex items-center gap-4">
-                 <Menu className="w-5 h-5 text-gray-400 md:hidden hover:text-white cursor-pointer" />
                  <div onClick={resetDashboard} className="cursor-pointer flex items-center gap-2 group">
                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-shop-purple to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-900/20 group-hover:scale-105 transition-transform duration-300">
                          <span className="font-bold text-white text-lg">P</span>
@@ -279,7 +229,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                  </div>
             </div>
 
-            {/* If searched, compact central search bar */}
             {searchState.hasSearched && (
                  <form onSubmit={handleSearch} className="flex-1 max-w-xl mx-4 animate-fade-in hidden md:block">
                      <div className="relative group">
@@ -289,21 +238,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                              value={searchState.query}
                              onChange={(e) => setSearchState(prev => ({...prev, query: e.target.value}))}
                              placeholder="Search products..."
-                             className="w-full bg-[#111] text-sm py-2.5 pl-10 pr-4 rounded-full border border-white/10 focus:bg-[#151515] focus:border-white/20 focus:ring-1 focus:ring-white/10 transition-all outline-none text-white placeholder:text-gray-600"
+                             className="w-full bg-[#111] text-sm py-2.5 pl-10 pr-4 rounded-full border border-white/10 focus:bg-[#151515] focus:border-white/20 outline-none text-white placeholder:text-gray-600"
                          />
                      </div>
                  </form>
             )}
 
             <div className="flex items-center gap-3 md:gap-6">
-                <ChatBot /> {/* Simple Icon ChatBot */}
-                <button className="p-2 rounded-full hover:bg-white/5 transition-colors text-gray-400 hover:text-white">
-                    <TrendingUp className="w-5 h-5" />
-                </button>
-                <button className="p-2 rounded-full hover:bg-white/5 transition-colors text-gray-400 hover:text-white relative">
-                    <ShoppingBag className="w-5 h-5" />
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-shop-purple rounded-full ring-2 ring-black"></span>
-                </button>
+                <ChatBot />
                 <div onClick={onLogout} className="w-9 h-9 rounded-full bg-gradient-to-br from-[#222] to-[#111] border border-white/10 flex items-center justify-center cursor-pointer transition-all hover:border-white/30 group">
                     <User className="w-4 h-4 text-gray-400 group-hover:text-white" />
                 </div>
@@ -312,42 +254,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       </header>
 
       <main className="relative z-10 flex-1 flex flex-col w-full h-full overflow-hidden">
-        
-        {/* State 0: Discovery Grid */}
         {!searchState.hasSearched && (
             <div className="flex flex-col h-full w-full overflow-y-auto scrollbar-hide">
                 <div className="flex-1 flex flex-col w-full max-w-[1600px] mx-auto px-4 md:px-6 pb-6 min-h-[700px]">
-                    {/* Top Section: Title & Search (Flex Grow to Center) */}
                     <div className="flex-1 flex flex-col items-center justify-center w-full z-10 relative">
-                        
-                        {/* Floating Background Elements */}
-                        <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-                            {/* Left Side */}
-                            <div className="absolute top-[10%] left-[5%] md:left-[10%] w-[180px] h-[240px] md:w-[240px] md:h-[320px] rounded-[2rem] bg-gradient-to-br from-white/5 to-transparent border border-white/5 rotate-[-12deg] opacity-40 blur-[1px] animate-pulse-slow">
-                                <img src="https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&q=80" alt="" className="w-full h-full object-cover rounded-[2rem] opacity-70 mix-blend-luminosity" />
-                            </div>
-                            
-                            {/* Right Side */}
-                            <div className="absolute top-[15%] right-[5%] md:right-[10%] w-[200px] h-[260px] md:w-[260px] md:h-[340px] rounded-[2rem] bg-gradient-to-bl from-white/5 to-transparent border border-white/5 rotate-[12deg] opacity-40 blur-[1px] animate-pulse-slow" style={{ animationDelay: '2s' }}>
-                                <img src="https://images.unsplash.com/photo-1600861194942-f883de0dfe96?w=600&q=80" alt="" className="w-full h-full object-cover rounded-[2rem] opacity-70 mix-blend-luminosity" />
-                            </div>
-
-                            {/* Extra tiny ones for depth */}
-                            <div className="absolute top-[40%] left-[2%] w-[120px] h-[120px] rounded-full border border-white/5 bg-white/5 blur-[2px] opacity-20 animate-bounce delay-700"></div>
-                            <div className="absolute top-[20%] right-[20%] w-[80px] h-[80px] rounded-full border border-shop-purple/20 bg-shop-purple/10 blur-[20px] opacity-40"></div>
-                        </div>
-
-                        <div className="w-full max-w-2xl flex flex-col items-center animate-slide-up bg-black/60 backdrop-blur-xl p-10 rounded-[3rem] border border-white/10 shadow-2xl shadow-black/80 z-10">
-                            {/* Central Logo Text */}
-                            <h1 className="text-5xl md:text-7xl font-black text-white tracking-tighter mb-10 text-center bg-clip-text text-transparent bg-gradient-to-b from-white to-gray-400 drop-shadow-sm">
+                        <div className="w-full max-w-2xl flex flex-col items-center animate-slide-up bg-black/60 backdrop-blur-xl p-10 rounded-[3rem] border border-white/10 shadow-2xl z-10">
+                            <h1 className="text-5xl md:text-7xl font-black text-white tracking-tighter mb-10 text-center bg-clip-text text-transparent bg-gradient-to-b from-white to-gray-400">
                                 Shop <span className="text-shop-purple">Smart.</span>
                             </h1>
-                            
-                            {/* Big Glassy Search Bar */}
                             <form onSubmit={handleSearch} className="w-full relative group">
                                 <div className="absolute -inset-0.5 bg-gradient-to-r from-shop-purple via-blue-500 to-shop-purple rounded-full opacity-30 blur-md group-hover:opacity-60 transition-opacity duration-500"></div>
-                                <div className="relative bg-black/80 backdrop-blur-2xl rounded-full flex items-center p-2 pl-6 shadow-2xl border border-white/10 group-hover:border-white/20 transition-all">
-                                    <Search className="w-6 h-6 text-gray-400 mr-3 group-hover:text-white transition-colors" />
+                                <div className="relative bg-black/80 backdrop-blur-2xl rounded-full flex items-center p-2 pl-6 shadow-2xl border border-white/10">
+                                    <Search className="w-6 h-6 text-gray-400 mr-3" />
                                     <input 
                                         type="text"
                                         placeholder="Search brands, products, styles..."
@@ -356,47 +274,31 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                                         onChange={(e) => setSearchState(prev => ({...prev, query: e.target.value}))}
                                         autoFocus
                                     />
-                                    <button type="submit" className="bg-white text-black p-4 rounded-full hover:scale-105 active:scale-95 transition-transform duration-200 shadow-lg shadow-white/10">
+                                    <button type="submit" className="bg-white text-black p-4 rounded-full hover:scale-105 active:scale-95 transition-transform duration-200">
                                         <ArrowRight className="w-5 h-5" />
                                     </button>
                                 </div>
                             </form>
-                            
-                            {/* Live Deals Ticker */}
                             <div className="mt-10 w-full overflow-hidden whitespace-nowrap mask-linear-fade">
                                 <div className="inline-flex animate-scroll items-center gap-8 text-sm text-gray-500 font-mono">
                                     <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>LIVE:</span>
-                                    <span>Sony WH-1000XM5 ₹19,999 (-18%)</span>
-                                    <span>•</span>
                                     <span>iPhone 15 ₹65,000</span>
                                     <span>•</span>
-                                    <span>Samsung S24 Ultra Low Stock</span>
+                                    <span>Sony WH-XM5 ₹22,999</span>
                                     <span>•</span>
-                                    <span>Nike Air Jordan 1 Restocked</span>
-                                    <span>•</span>
-                                    <span>PS5 Slim ₹39,990</span>
+                                    <span>Nike Dunk Low restocked</span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Bottom Section: Single Row of Spotlight Cards (No Overlap) */}
                     <div className="w-full h-48 md:h-64 shrink-0 grid grid-cols-5 gap-4 mt-4 animate-fade-in opacity-0" style={{ animationDelay: '0.3s' }}>
                         {DISCOVERY_TILES.map((tile) => (
-                            <SpotlightCard key={tile.id} className="group cursor-pointer hover:border-white/20">
-                                <img 
-                                    src={tile.img} 
-                                    alt={tile.title}
-                                    className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-80 group-hover:scale-105 transition-all duration-1000" 
-                                />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-90 group-hover:opacity-70 transition-opacity"></div>
-                                
-                                {/* Text Overlay */}
-                                <div className="absolute inset-0 p-6 flex flex-col justify-end pointer-events-none">
-                                    <h3 className="text-xl font-bold text-white tracking-tight translate-y-2 group-hover:translate-y-0 opacity-80 group-hover:opacity-100 transition-all duration-300">
-                                        {tile.title}
-                                    </h3>
-                                    <div className="h-1 w-8 bg-white/50 mt-2 transform scale-x-0 group-hover:scale-x-100 origin-left transition-transform duration-500"></div>
+                            <SpotlightCard key={tile.id} className="group cursor-pointer">
+                                <img src={tile.img} alt={tile.title} className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:scale-105 transition-all duration-1000" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-90 transition-opacity"></div>
+                                <div className="absolute inset-0 p-6 flex flex-col justify-end">
+                                    <h3 className="text-xl font-bold text-white tracking-tight">{tile.title}</h3>
                                 </div>
                             </SpotlightCard>
                         ))}
@@ -406,33 +308,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             </div>
         )}
 
-        {/* State 1: Search Results (Scrollable) */}
         {searchState.hasSearched && (
             <div className="flex-1 overflow-y-auto w-full scrollbar-hide flex flex-col">
             <div className="max-w-[1800px] mx-auto px-4 md:px-6 pt-8 pb-20 w-full flex-1">
                 
-                {/* Results Header */}
-                <div className="flex items-center justify-between mb-8 animate-fade-in">
+                <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 animate-fade-in gap-4">
                     <h2 className="text-2xl font-bold text-white flex items-center gap-3">
                         Results for <span className="text-shop-purple">"{searchState.query}"</span>
                         <span className="text-sm font-normal text-gray-500 bg-white/5 px-2 py-1 rounded-md">{sortedResults.length} items</span>
                     </h2>
                     
-                    {/* Sort/Filter Mock */}
-                    <div className="flex gap-2">
-                        <select className="bg-black border border-white/10 rounded-lg text-sm px-3 py-2 text-gray-400 focus:outline-none focus:border-white/30 cursor-pointer hover:bg-white/5 transition-colors">
-                            <option>Best Match</option>
-                            <option>Price: Low to High</option>
-                            <option>Price: High to Low</option>
-                        </select>
-                    </div>
+                    {isApiKeyMissing && !searchState.isLoading && (
+                       <div className="flex items-center gap-2 text-amber-500 bg-amber-500/10 px-4 py-2 rounded-full border border-amber-500/20 text-xs font-mono animate-pulse-slow">
+                           <Zap className="w-4 h-4" /> DEMO MODE: MOCK DATA SOURCE
+                       </div>
+                    )}
                 </div>
 
-                {/* Enhanced Connection Loader */}
                 {searchState.isLoading && (
                     <div className="flex flex-col items-center justify-center h-[50vh] text-gray-400">
                         <div className="relative mb-8">
-                            {/* Spinning outer rings */}
                             <div className="absolute inset-0 bg-shop-purple/20 blur-xl rounded-full animate-pulse"></div>
                             <div className="w-20 h-20 rounded-full border border-white/10 flex items-center justify-center relative animate-spin-slow">
                                 <div className="absolute top-0 w-2 h-2 bg-shop-purple rounded-full shadow-[0_0_10px_#5A31F4]"></div>
@@ -441,106 +336,73 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                                 <Loader2 className="w-8 h-8 text-white animate-spin" />
                             </div>
                         </div>
-                        
-                        <div className="flex flex-col items-center gap-2">
-                            <h3 className="text-xl font-bold text-white tracking-tight animate-pulse">{loadingStatus}</h3>
-                            <div className="flex items-center gap-4 text-xs font-mono text-gray-600 mt-2">
-                                <span className="flex items-center gap-1"><Server className="w-3 h-3" /> CONNECTED</span>
-                                <span className="flex items-center gap-1"><Database className="w-3 h-3" /> SYNCING</span>
-                                <span className="flex items-center gap-1"><Globe className="w-3 h-3" /> PROXY: ON</span>
-                            </div>
-                        </div>
+                        <h3 className="text-xl font-bold text-white tracking-tight animate-pulse">{loadingStatus}</h3>
                     </div>
                 )}
                 
-                {/* No Results State */}
                 {sortedResults.length === 0 && !searchState.isLoading && (
                     <div className="flex flex-col items-center justify-center py-20 text-gray-500 animate-fade-in">
                         <Search className="w-16 h-16 mb-4 opacity-20" />
                         <p className="text-xl font-medium">No results found for "{searchState.query}"</p>
-                        <p className="text-sm mt-2 text-gray-600">Try a different keyword or check your spelling.</p>
                     </div>
-                )}
-
-                {usedFallback && sortedResults.length > 0 && !searchState.isLoading && (
-                   <div className="mb-8 flex items-center gap-3 text-amber-300 bg-amber-900/10 px-5 py-3 rounded-xl border border-amber-900/30 w-fit backdrop-blur-md animate-slide-up">
-                       <Zap className="w-5 h-5 fill-amber-300/20" />
-                       <span className="text-sm font-medium">Demo Mode: Simulating live data source (API Key may be missing).</span>
-                   </div>
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-y-12 gap-x-8">
                     {sortedResults.map((product, index) => {
                          const isGeneratingImg = generatingIds.has(product.id);
-                         const hasGeneratedImg = !!generatedImages[product.id];
-                         // Use generated image if available, otherwise original
-                         const imageSrc = hasGeneratedImg ? generatedImages[product.id] : product.image;
+                         const imageSrc = generatedImages[product.id] || product.image;
                          
                          return (
                             <SpotlightCard key={product.id} className="group flex flex-col h-full animate-slide-up hover:border-white/20" >
                                 <div style={{ animationDelay: `${index * 0.05}s` }} className="h-full flex flex-col">
-                                <a 
-                                    href={product.offers[0]?.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="relative aspect-[4/5] rounded-[1.5rem] overflow-hidden bg-[#0A0A0A] border-b border-white/5 group-hover:border-white/10 transition-all duration-300 m-1"
-                                >
-                                    {/* Image Container */}
+                                <div className="relative aspect-[4/5] rounded-[1.5rem] overflow-hidden bg-[#0A0A0A] border-b border-white/5 m-1">
                                     <div className="absolute inset-0 w-full h-full p-8 flex items-center justify-center transition-colors duration-500 bg-gradient-to-b from-white/5 to-transparent">
                                         {isGeneratingImg ? (
                                             <div className="flex flex-col items-center justify-center text-shop-purple animate-pulse">
                                                 <Sparkles className="w-8 h-8 mb-2" />
-                                                <span className="text-xs font-mono font-bold tracking-widest uppercase">Generating Image...</span>
+                                                <span className="text-xs font-mono font-bold tracking-widest uppercase">Generating...</span>
                                             </div>
                                         ) : (
                                             <img 
                                                 src={imageSrc} 
                                                 alt={product.name}
                                                 className="max-w-full max-h-full object-contain transition-transform duration-700 group-hover:scale-110 drop-shadow-2xl"
-                                                onError={() => {
-                                                    // If the image fails and we haven't already generated one, trigger generation
-                                                    if (!hasGeneratedImg) {
-                                                        setFailedImageIds(prev => new Set(prev).add(product.id));
-                                                        triggerImageGeneration(product.id, product.name);
-                                                    }
-                                                }}
+                                                onError={() => !isGeneratingImg && triggerImageGeneration(product.id, product.name)}
                                             />
                                         )}
                                     </div>
 
-                                    {/* Quick Action Overlay */}
                                     <div className="absolute top-4 right-4 z-20">
                                         <button className="bg-white/10 hover:bg-white text-white hover:text-black p-2.5 rounded-full backdrop-blur-md transition-all duration-300 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0">
                                             <Heart className="w-5 h-5" />
                                         </button>
                                     </div>
 
-                                    {/* Live Image Badge - Always show "LIVE IMG" to enable seamless look */}
-                                    <div className="absolute top-4 right-14 z-20 bg-black/60 backdrop-blur-md px-2 py-1 rounded-full border border-green-500/30 flex items-center gap-1 text-[10px] text-green-400 font-mono shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <Globe className="w-3 h-3" /> LIVE IMG
-                                    </div>
+                                    {!isApiKeyMissing && (
+                                        <div className="absolute top-4 right-14 z-20 bg-black/60 backdrop-blur-md px-2 py-1 rounded-full border border-green-500/30 flex items-center gap-1 text-[10px] text-green-400 font-mono shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Globe className="w-3 h-3" /> LIVE SOURCE
+                                        </div>
+                                    )}
                                     
                                     <div className="absolute top-4 left-4 z-20 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 border border-white/10 text-white shadow-lg">
                                         <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" /> {product.rating}
                                     </div>
-                                </a>
+                                </div>
 
                                 <div className="mt-4 flex-1 flex flex-col px-4 pb-4">
-                                    <div className="flex justify-between items-start gap-4 mb-2">
-                                        <h3 className="font-bold text-lg text-white leading-tight line-clamp-2 group-hover:text-shop-purple transition-colors">
-                                            {product.name}
-                                        </h3>
-                                    </div>
+                                    <h3 className="font-bold text-lg text-white leading-tight line-clamp-2 group-hover:text-shop-purple transition-colors mb-1">
+                                        {product.name}
+                                    </h3>
                                     <p className="text-sm text-gray-500 mb-4">{product.category}</p>
 
                                     <div className="mt-auto space-y-2 bg-[#111] rounded-xl p-3 border border-white/5">
                                         {product.offers.slice(0, 2).map((offer, idx) => (
                                             <div key={idx} className="flex justify-between items-center text-sm">
-                                                <div className="flex items-center gap-2.5">
-                                                    <div className="w-5 h-5 rounded-md bg-white flex items-center justify-center overflow-hidden shrink-0">
+                                                <div className="flex items-center gap-2.5 overflow-hidden">
+                                                    <div className="w-5 h-5 rounded-md bg-white flex items-center justify-center shrink-0">
                                                         <img src={`https://www.google.com/s2/favicons?domain=${getSafeHostname(offer.url)}&sz=32`} className="w-4 h-4" alt="" />
                                                     </div>
-                                                    <span className="text-gray-400 truncate max-w-[100px]">{offer.store}</span>
+                                                    <span className="text-gray-400 truncate">{offer.store}</span>
                                                 </div>
                                                 <span className={`font-mono font-medium ${idx === 0 ? 'text-green-400' : 'text-gray-500'}`}>
                                                     {formatCurrency(offer.price, offer.currency)}
@@ -552,10 +414,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                                     <div className="mt-3">
                                         <button 
                                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleAnalyze(product); }}
-                                            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-white/5 hover:bg-white text-gray-300 hover:text-black font-medium text-sm transition-all border border-white/5 group-active:scale-[0.98] relative z-30"
+                                            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-white/5 hover:bg-white text-gray-300 hover:text-black font-medium text-sm transition-all border border-white/5 relative z-30"
                                             disabled={analyzingId === product.id}
                                         >
-                                             {analyzingId === product.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Sparkles className="w-4 h-4" /> AI Analysis</>}
+                                             {analyzingId === product.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Sparkles className="w-4 h-4" /> Analyze Deal</>}
                                         </button>
                                     </div>
                                 </div>
@@ -565,38 +427,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                     })}
                 </div>
                 
-                {/* AI Analysis Modal */}
                 {analysis && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-black/80 backdrop-blur-md animate-fade-in" onClick={() => setAnalysis(null)}>
                         <div className="bg-[#0A0A0A] p-8 rounded-[2rem] shadow-2xl max-w-md w-full animate-slide-up border border-white/10 relative overflow-hidden" onClick={e => e.stopPropagation()}>
-                            {/* Glow effect inside modal */}
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-shop-purple/20 blur-[60px] rounded-full pointer-events-none"></div>
-                            <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/10 blur-[60px] rounded-full pointer-events-none"></div>
-                            
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-shop-purple/20 blur-[60px] rounded-full"></div>
                             <div className="relative z-10">
                                 <div className="flex justify-between items-start mb-6">
                                     <div className="flex items-center gap-3 text-shop-purple font-bold text-lg">
-                                        <div className="p-2 bg-shop-purple/10 rounded-lg">
-                                            <Sparkles className="w-5 h-5" /> 
-                                        </div>
-                                        Gemini Insight
+                                        <Sparkles className="w-5 h-5" /> Gemini Insight
                                     </div>
-                                    <button onClick={() => setAnalysis(null)} className="text-gray-500 hover:text-white transition-colors">
-                                        <X className="w-6 h-6" />
-                                    </button>
+                                    <button onClick={() => setAnalysis(null)} className="text-gray-500 hover:text-white transition-colors"><X className="w-6 h-6" /></button>
                                 </div>
-                                
                                 <div className="min-h-[100px] text-gray-200 text-lg leading-relaxed font-light mb-8 font-mono">
-                                    {displayedAnalysis}
-                                    <span className="inline-block w-2 h-5 bg-shop-purple ml-1 animate-pulse align-middle"></span>
+                                    {displayedAnalysis}<span className="inline-block w-2 h-5 bg-shop-purple ml-1 animate-pulse align-middle"></span>
                                 </div>
-                                
-                                <button 
-                                    onClick={() => setAnalysis(null)}
-                                    className="w-full bg-white text-black py-4 rounded-xl font-bold hover:bg-gray-200 transition-colors shadow-lg shadow-white/10"
-                                >
-                                    Close Analysis
-                                </button>
+                                <button onClick={() => setAnalysis(null)} className="w-full bg-white text-black py-4 rounded-xl font-bold hover:bg-gray-200 transition-colors">Close Analysis</button>
                             </div>
                         </div>
                     </div>
@@ -605,7 +450,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             <Footer />
             </div>
         )}
-
       </main>
     </div>
   );

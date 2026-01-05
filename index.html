@@ -8,13 +8,14 @@
     <script>
       /**
        * Safe Process shim for browser environment.
-       * We use a non-destructive check to ensure that if the environment (like Vercel) 
-       * provides process.env.API_KEY via a global or injection, we don't wipe it.
+       * Ensures process.env is available without overwriting existing global injections.
        */
-      if (typeof window.process === 'undefined') {
-        window.process = { env: {} };
-      }
-      window.process.env = window.process.env || {};
+      window.process = window.process || { env: {} };
+      window.process.env = { 
+          ...window.process.env,
+          // If the platform (Vercel) injects API_KEY elsewhere, we map it here
+          API_KEY: window.process.env.API_KEY || ""
+      };
 
       tailwind.config = {
         theme: {
